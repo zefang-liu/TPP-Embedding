@@ -4,11 +4,11 @@ TPP-LLM Embedding Runner
 from typing import Dict, Tuple, Union
 
 import torch
+import transformers
 from torch import nn, Tensor
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
-from transformers import get_cosine_schedule_with_warmup
 
 from tpp_llm_embedding.evaluation import evaluate_similarities
 
@@ -18,31 +18,24 @@ class TPPLLMEmbeddingRunner(object):
     TPP-LLM Embedding Model Runner
     """
 
-    def __init__(
-        self, model: nn.Module, loss_fn: nn.Module, learning_rate: float, num_epochs: int, warmup_ratio: float,
-        device: Union[str, torch.device] = 'cpu'):
+    def __init__(self, model: nn.Module, loss_fn: nn.Module, device: Union[str, torch.device] = 'cpu'):
         """
         Initialize the TPP-LLM embedding model runner
 
         :param model: TPP-LLM embedding model
         :param loss_fn: loss function
-        :param learning_rate: learning rate
-        :param num_epochs: number of epochs
-        :param warmup_ratio: ratio for warm-up steps
         :param device: device
         """
         self.model = model
         self.loss_fn = loss_fn
-        self.learning_rate = learning_rate
-        self.num_epochs = num_epochs
-        self.warmup_ratio = warmup_ratio
-        self.optimizer = Adam(params=self.model.parameters(), lr=self.learning_rate)
         self.device = torch.device(device)
 
+        self.num_train_epochs = 0
         self.num_training_steps = 0
         self.num_warmup_steps = 0
         self.global_step = 0
         self.scheduler = None
+        self.optimizer = None
 
     def run_batch(self, batch: Dict[str, list], phase: str) -> Tuple[Tensor, Tensor]:
         """
@@ -71,7 +64,7 @@ class TPPLLMEmbeddingRunner(object):
             metrics = {
                 'loss': loss.float().cpu().item(),
                 'learning_rate': self.optimizer.param_groups[0]['lr'],
-                'epoch': self.global_step / self.num_training_steps * self.num_epochs,
+                'epoch': self.global_step / self.num_training_steps * self.num_train_epochs,
             }
             print(metrics)
 
@@ -127,26 +120,51 @@ class TPPLLMEmbeddingRunner(object):
 
     def run(
         self, dataloader_train: DataLoader = None, dataloader_val: DataLoader = None,
-        dataloader_test: DataLoader = None) -> None:
+        dataloader_test: DataLoader = None, learning_rate: float = 5e-4, lr_scheduler_type: str = 'constant',
+        num_train_epochs: int = 1, warmup_ratio: float = 0) -> None:
         """
         Run the training, validation, and testing for the model
 
         :param dataloader_train: data loader of the training set
         :param dataloader_val: data loader of the validation set
         :param dataloader_test: data loader of the testing set
+        :param learning_rate: learning rate
+        :param lr_scheduler_type: learning rate scheduler type
+        :param num_train_epochs: number of training epochs
+        :param warmup_ratio: warmup ratio
         """
         # Calculate the number of training steps and the number of warmup steps
-        self.num_training_steps = self.num_epochs * len(dataloader_train)
-        self.num_warmup_steps = int(self.warmup_ratio * self.num_training_steps)
+        self.num_train_epochs = num_train_epochs
+        self.num_training_steps = self.num_train_epochs * len(dataloader_train)
+        self.num_warmup_steps = int(warmup_ratio * self.num_training_steps)
         self.global_step = 0
+        self.optimizer = Adam(params=self.model.parameters(), lr=learning_rate)
 
-        # Initialize the learning rate scheduler with warm-up
-        self.scheduler = get_cosine_schedule_with_warmup(
-            optimizer=self.optimizer,
-            num_warmup_steps=self.num_warmup_steps,
-            num_training_steps=self.num_training_steps,
-            num_cycles=0.5,
-        )
+        # Initialize the learning rate scheduler
+        if lr_scheduler_type == 'constant':
+            self.scheduler = transformers.get_constant_schedule(
+                optimizer=self.optimizer,
+            )
+        elif lr_scheduler_type == 'constant_with_warmup':
+            self.scheduler = transformers.get_constant_schedule_with_warmup(
+                optimizer=self.optimizer,
+                num_warmup_steps=self.num_warmup_steps,
+            )
+        elif lr_scheduler_type == 'linear':
+            self.scheduler = transformers.get_linear_schedule_with_warmup(
+                optimizer=self.optimizer,
+                num_warmup_steps=self.num_warmup_steps,
+                num_training_steps=self.num_training_steps,
+            )
+        elif lr_scheduler_type == 'cosine':
+            self.scheduler = transformers.get_cosine_schedule_with_warmup(
+                optimizer=self.optimizer,
+                num_warmup_steps=self.num_warmup_steps,
+                num_training_steps=self.num_training_steps,
+                num_cycles=0.5,
+            )
+        else:
+            raise KeyError(f'Unknown learning rate scheduler type: {lr_scheduler_type}')
 
         # Initial validation
         metrics_val_best = None
@@ -161,7 +179,7 @@ class TPPLLMEmbeddingRunner(object):
             print(f'test results: {metrics_test}')
 
         # Start training loop
-        for epoch in range(self.num_epochs):
+        for epoch in range(self.num_train_epochs):
             print(f'epoch: {epoch}')
 
             if dataloader_train:
@@ -172,7 +190,7 @@ class TPPLLMEmbeddingRunner(object):
                 metrics_val = self.run_epoch(dataloader_val, phase='eval')
                 print(f'validation results of epoch {epoch}: {metrics_val}')
 
-                if metrics_val['cosine_mrr'] > metrics_val_best['cosine_mrr']:
+                if metrics_val_best is not None and metrics_val['cosine_mrr'] > metrics_val_best['cosine_mrr']:
                     metrics_val_best = metrics_val
                     print(f'new best validation results')
 

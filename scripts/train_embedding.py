@@ -49,9 +49,11 @@ if __name__ == '__main__':
     parser.add_argument(
         '--learning_rate', type=float, default=5e-4, help='larning rate')
     parser.add_argument(
-        '--warmup_ratio', type=float, default=0, help='warmup ratio')
+        '--lr_scheduler_type', type=str, default='constant', help='learning rate scheduler type')
     parser.add_argument(
-        '--num_epochs', type=int, default=1, help='number of epochs')
+        '--num_train_epochs', type=int, default=1, help='number of training epochs')
+    parser.add_argument(
+        '--warmup_ratio', type=float, default=0, help='warmup ratio')
     parser.add_argument(
         '--device', type=str, default='cpu', help='cpu or cuda device')
     parser.add_argument(
@@ -117,13 +119,14 @@ if __name__ == '__main__':
     runner = TPPLLMEmbeddingRunner(
         model=model,
         loss_fn=TPPLLMMultipleNegativesRankingLoss(),
-        learning_rate=args.learning_rate,
-        num_epochs=args.num_epochs,
-        warmup_ratio=args.warmup_ratio,
         device=args.device,
     )
     runner.run(
         dataloader_train=dataloader_train,
         dataloader_val=dataloader_val,
         dataloader_test=dataloader_test,
+        learning_rate=args.learning_rate,
+        lr_scheduler_type=args.lr_scheduler_type,
+        num_train_epochs=args.num_train_epochs,
+        warmup_ratio=args.warmup_ratio,
     )
