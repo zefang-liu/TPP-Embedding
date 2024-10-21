@@ -52,9 +52,16 @@ All above datasets are available on [Hugging Face](https://huggingface.co/tppllm
 
 ## Citation
 
-If you find TPP-LLM-Embedding useful in your research, please cite our [paper](https://arxiv.org/abs/2410.14043):
+If you find TPP-LLM-Embedding useful in your research, please cite our [papers](https://arxiv.org/abs/2410.14043):
 
 ```bibtex
+@article{liu2024tppllmm,
+  title={TPP-LLM: Modeling Temporal Point Processes by Efficiently Fine-Tuning Large Language Models},
+  author={Liu, Zefang and Quan, Yinzhu},
+  journal={arXiv preprint arXiv:2410.02062},
+  year={2024}
+}
+
 @article{liu2024efficient,
   title={Efficient Retrieval of Temporal Event Sequences from Textual Descriptions},
   author={Liu, Zefang and Quan, Yinzhu},
