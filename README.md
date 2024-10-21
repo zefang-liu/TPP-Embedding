@@ -1,6 +1,6 @@
 # TPP-LLM-Embedding: Temporal Event Sequence Retrieval
 
-This repository contains the code and resources for **TPP-LLM-Embedding**, a model designed for retrieving temporal event sequences from textual descriptions. It integrates **[TPP-LLM](https://github.com/zefang-liu/TPP-LLM)** to generate shared embeddings for event sequences and descriptions, enabling efficient retrieval based on semantic and temporal information.
+This repository contains the code and resources for **TPP-LLM-Embedding**, a model designed for retrieving temporal event sequences from textual descriptions. It integrates **[TPP-LLM](https://github.com/zefang-liu/TPP-LLM)** to generate shared embeddings for event sequences and descriptions, enabling efficient retrieval based on semantic and temporal information. For more details, please refer to our [paper](https://arxiv.org/abs/2410.14043).
 
 ## Features
 
@@ -52,9 +52,15 @@ All above datasets are available on [Hugging Face](https://huggingface.co/tppllm
 
 ## Citation
 
-If you find TPP-LLM-Embedding useful in your research, please cite our [paper]():
+If you find TPP-LLM-Embedding useful in your research, please cite our [paper](https://arxiv.org/abs/2410.14043):
 
 ```bibtex
+@article{liu2024efficient,
+  title={Efficient Retrieval of Temporal Event Sequences from Textual Descriptions},
+  author={Liu, Zefang and Quan, Yinzhu},
+  journal={arXiv preprint arXiv:2410.14043},
+  year={2024}
+}
 ```
 
 ## License
