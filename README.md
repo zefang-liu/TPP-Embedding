@@ -62,7 +62,7 @@ If you find TPP-Embedding useful in your research, please cite our [papers](http
   year={2024}
 }
 
-@article{liu2024efficient,
+@article{liu2024retrieval,
   title={Retrieval of Temporal Event Sequences from Textual Descriptions},
   author={Liu, Zefang and Quan, Yinzhu},
   journal={arXiv preprint arXiv:2410.14043},
