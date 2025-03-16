@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from transformers import BitsAndBytesConfig
 
 from tpp_llm_embedding.data import TPPLLMDataset, collate_fn
-from tpp_llm_embedding.losses import TPPLLMMultipleNegativesRankingLoss
+from tpp_llm_embedding.losses import TPPLLMMultipleNegativesRankingLoss, TPPLLMSimilarityMSELoss
 from tpp_llm_embedding.model import TPPLLMEmbeddingModel
 from tpp_llm_embedding.runner import TPPLLMEmbeddingRunner
 
@@ -30,7 +30,11 @@ if __name__ == '__main__':
     parser.add_argument(
         '--temporal_emb_first', action='store_true', help='temporal embedding first or not')
     parser.add_argument(
-        '--embedding_mode', type=str, default='all', help='embedding mode for event sequence embeddings')
+        '--embedding_mode', type=str, default='both', choices=['time', 'type', 'both'],
+        help='embedding mode for event sequence embeddings')
+    parser.add_argument(
+        '--hidden_state_mode', type=str, default='all', choices=['last', 'both', 'all'],
+        help='hidden state selection for event sequence embeddings')
     parser.add_argument(
         '--pooling_mode', type=str, default='mean', help='pooling mode for the last hidden layer')
     parser.add_argument(
@@ -42,6 +46,8 @@ if __name__ == '__main__':
     parser.add_argument(
         '--lora_modules', type=str, nargs='+', default=['q_proj', 'k_proj', 'v_proj', 'o_proj'],
         help='lora target modules')
+    parser.add_argument(
+        '--loss_fn', type=str, default='rank', choices=['rank', 'mse'], help='loss function type')
     parser.add_argument(
         '--train_batch_size', type=int, default=16, help='batch size for training')
     parser.add_argument(
@@ -86,10 +92,10 @@ if __name__ == '__main__':
         peft_config = LoraConfig(
             r=args.lora_rank,
             lora_alpha=16,
-            target_modules=args.lora_modules,
             lora_dropout=0.05,
-            bias="none",
+            target_modules=args.lora_modules,
             task_type=TaskType.FEATURE_EXTRACTION,
+            bias="none",
         )
     else:
         peft_config = None
@@ -99,10 +105,11 @@ if __name__ == '__main__':
         model_name=args.model_path,
         temporal_emb_type=args.temporal_emb_type,
         temporal_emb_first=args.temporal_emb_first,
+        embedding_mode=args.embedding_mode,
+        hidden_state_mode=args.hidden_state_mode,
+        pooling_mode=args.pooling_mode,
         bnb_config=bnb_config,
         peft_config=peft_config,
-        embedding_mode=args.embedding_mode,
-        pooling_mode=args.pooling_mode,
         device=args.device,
     )
     print(f'model: {model}')
@@ -115,10 +122,18 @@ if __name__ == '__main__':
     dataloader_val = DataLoader(dataset_val, batch_size=args.eval_batch_size, shuffle=False, collate_fn=collate_fn)
     dataloader_test = DataLoader(dataset_test, batch_size=args.eval_batch_size, shuffle=False, collate_fn=collate_fn)
 
+    # Get the loss function
+    if args.loss_fn == 'rank':
+        loss_fn = TPPLLMMultipleNegativesRankingLoss()
+    elif args.loss_fn == 'mse':
+        loss_fn = TPPLLMSimilarityMSELoss()
+    else:
+        loss_fn = None
+
     # Train and test the model
     runner = TPPLLMEmbeddingRunner(
         model=model,
-        loss_fn=TPPLLMMultipleNegativesRankingLoss(),
+        loss_fn=loss_fn,
         device=args.device,
     )
     runner.run(

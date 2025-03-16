@@ -47,7 +47,7 @@ def collate_fn(batch: dict) -> dict:
 
 def merge_datasets(source_folders: List[str], target_folder: str, sample_ratio: float, seed=0) -> None:
     """
-    Merge datasets into a multi-task dataset
+    Merge datasets into a multi-domain dataset
 
     :param source_folders: a list of source folders
     :param target_folder: a target folder

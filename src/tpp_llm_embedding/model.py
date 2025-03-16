@@ -5,6 +5,7 @@ from typing import List, Union
 
 import torch
 import torch.nn as nn
+import transformers
 from peft import get_peft_model, PeftConfig
 from sentence_transformers import models
 from torch import Tensor
@@ -19,16 +20,17 @@ class TPPLLMEmbeddingModel(nn.Module):
     """
 
     def __init__(
-        self, model_name: str, temporal_emb_type: str, temporal_emb_first: bool = False, embedding_mode: str = 'all',
-        pooling_mode: str = 'mean', bnb_config: BitsAndBytesConfig = None, peft_config: PeftConfig = None,
-        device: Union[str, torch.device] = 'cpu'):
+        self, model_name: str, temporal_emb_type: str, temporal_emb_first: bool = False, embedding_mode: str = 'both',
+        hidden_state_mode: str = 'all', pooling_mode: str = 'mean', bnb_config: BitsAndBytesConfig = None,
+        peft_config: PeftConfig = None, device: Union[str, torch.device] = 'cpu'):
         """
         Initialize the TPP-LLM Embedding model
 
         :param model_name: LLM name
         :param temporal_emb_type: temporal embedding type
         :param temporal_emb_first: temporal embedding first (before the text embedding) for each event
-        :param embedding_mode: embedding mode ("last" embedding, "both" embeddings, or "all" embeddings)
+        :param embedding_mode: embedding model ("time" embedding, "type" embedding, or "both" embeddings)
+        :param hidden_state_mode: hidden state mode ("last" embedding, "both" embeddings, or "all" embeddings)
         :param pooling_mode: pooling mode for the last hidden layer
         :param bnb_config: bits and bytes configuration
         :param peft_config: PEFT configuration
@@ -63,6 +65,7 @@ class TPPLLMEmbeddingModel(nn.Module):
         self.llm_embedder = self.llm.get_input_embeddings()
         self.embedding_dim = self.llm_embedder.embedding_dim
         self.embedding_mode = embedding_mode
+        self.hidden_state_mode = hidden_state_mode
         self.pooling_mode = pooling_mode
         self.temporal_emb_type = temporal_emb_type
         self.temporal_emb_first = temporal_emb_first
@@ -146,40 +149,44 @@ class TPPLLMEmbeddingModel(nn.Module):
             for temporal_embedding, event_token_embeddings in zip(temporal_embeddings, event_text_embeddings):
                 if self.temporal_emb_first:
                     # Add the event time embedding, temporal_embedding: (embedding_dim,)
-                    sequence_embeddings.append(temporal_embedding)
-                    sequence_attention_mask.append(1)
-                    if self.embedding_mode == 'all' or self.embedding_mode == 'both':
-                        event_emb_indices.append(len(sequence_embeddings) - 1)
-
-                    # Add event text token embeddings, event_token_embedding: (embedding_dim,)
-                    for event_token_embedding in event_token_embeddings:
-                        sequence_embeddings.append(event_token_embedding)
+                    if self.embedding_mode in ['time', 'both']:
+                        sequence_embeddings.append(temporal_embedding)
                         sequence_attention_mask.append(1)
-                        if self.embedding_mode == 'all':
+                        if self.hidden_state_mode == 'all' or self.hidden_state_mode == 'both':
                             event_emb_indices.append(len(sequence_embeddings) - 1)
 
-                    if self.embedding_mode == 'both':
-                        event_emb_indices.append(len(sequence_embeddings) - 1)
+                    # Add event text token embeddings, event_token_embedding: (embedding_dim,)
+                    if self.embedding_mode in ['type', 'both']:
+                        for event_token_embedding in event_token_embeddings:
+                            sequence_embeddings.append(event_token_embedding)
+                            sequence_attention_mask.append(1)
+                            if self.hidden_state_mode == 'all':
+                                event_emb_indices.append(len(sequence_embeddings) - 1)
+
+                        if self.hidden_state_mode == 'both':
+                            event_emb_indices.append(len(sequence_embeddings) - 1)
 
                 else:
                     # Add event text token embeddings, event_token_embedding: (embedding_dim,)
-                    for event_token_embedding in event_token_embeddings:
-                        sequence_embeddings.append(event_token_embedding)
-                        sequence_attention_mask.append(1)
-                        if self.embedding_mode == 'all':
+                    if self.embedding_mode in ['type', 'both']:
+                        for event_token_embedding in event_token_embeddings:
+                            sequence_embeddings.append(event_token_embedding)
+                            sequence_attention_mask.append(1)
+                            if self.hidden_state_mode == 'all':
+                                event_emb_indices.append(len(sequence_embeddings) - 1)
+
+                        if self.hidden_state_mode == 'both':
                             event_emb_indices.append(len(sequence_embeddings) - 1)
 
-                    if self.embedding_mode == 'both':
-                        event_emb_indices.append(len(sequence_embeddings) - 1)
-
                     # Add the event time embedding, temporal_embedding: (embedding_dim,)
-                    sequence_embeddings.append(temporal_embedding)
-                    sequence_attention_mask.append(1)
-                    if self.embedding_mode == 'all' or self.embedding_mode == 'both':
-                        event_emb_indices.append(len(sequence_embeddings) - 1)
+                    if self.embedding_mode in ['time', 'both']:
+                        sequence_embeddings.append(temporal_embedding)
+                        sequence_attention_mask.append(1)
+                        if self.hidden_state_mode == 'all' or self.hidden_state_mode == 'both':
+                            event_emb_indices.append(len(sequence_embeddings) - 1)
 
                 # Record the index of the last embedding of this event
-                if self.embedding_mode == 'last':
+                if self.hidden_state_mode == 'last':
                     event_emb_indices.append(len(sequence_embeddings) - 1)
 
             # Convert sequence embeddings to tensors
